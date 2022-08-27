@@ -5,11 +5,20 @@
   "repository": "https://github.com/Firfi/idempotency-key-js",
   "author": "Firfi",
   "license": "MIT",
+  "scripts": {
+    "lint": "npx eslint . --ext .ts",
+    "lint:fix": "npm run lint -- --fix",
+    "prettier": "npx prettier --write ."
+  },
   "devDependencies": {
     "@types/node": "^18.7.8",
+    "eslint": "^8.23.0",
+    "prettier": "^2.7.1",
     "typescript": "^4.7.4"
   },
   "dependencies": {
+    "@typescript-eslint/eslint-plugin": "^5.35.1",
+    "@typescript-eslint/parser": "^5.35.1",
     "fp-ts": "^2.12.2"
   }
 }
