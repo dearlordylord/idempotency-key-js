@@ -8,20 +8,20 @@ import { Option } from 'fp-ts/Option';
 import * as O from 'fp-ts/Option';
 import { identity } from 'fp-ts/function';
 
-const NO_OP = 'noOp' as const;
-const REC_POINT = 'recoveryPoint' as const;
-const RESP = 'response' as const;
+export const NO_OP = 'noOp' as const;
+export const REC_POINT = 'recoveryPoint' as const;
+export const RESP = 'response' as const;
 
-type NoOp = typeof NO_OP;
-type RecPoint = typeof REC_POINT;
-type Resp = typeof RESP;
+export type NoOp = typeof NO_OP;
+export type RecPoint = typeof REC_POINT;
+export type Resp = typeof RESP;
 
-type EffectType = NoOp | RecPoint | Resp;
+export type EffectType = NoOp | RecPoint | Resp;
 
-enum RecPointNameBrand {
+export enum RecPointNameBrand {
   _ = '',
 }
-type RecPointCustomName = string & RecPointNameBrand;
+export type RecPointCustomName = string & RecPointNameBrand;
 
 type EffectResult<T extends EffectType, R = unknown, RP extends RecPointCustomName = RecPointCustomName> =
   | {
@@ -31,7 +31,6 @@ type EffectResult<T extends EffectType, R = unknown, RP extends RecPointCustomNa
   | {
       // TODO implement passing result to next effect
       type: RecPoint;
-      name: RP;
     }
   | {
       type: Resp;
@@ -76,7 +75,7 @@ type IdempotencyKeyDbResult<
   // TODO locked_at?
 };
 
-type Config<
+export type Config<
   Tx,
   Step extends RecPointCustomName,
   FirstStep extends string,
@@ -91,9 +90,10 @@ type Config<
   createIdempotencyKey: (tx: Tx) => TaskEither<E, Key>;
   startTransaction: () => Tx;
   closeTransaction: (tx: Tx) => void;
-  saveRecPoint: (tx: Tx) => (s: Step) => TaskEither<E, void>;
-  saveArgs: (args: Args /*TODO type*/) => (tx: Tx) => TaskEither<E, void>;
-  saveResp: (tx: Tx) => (s: R) => TaskEither<E, void>;
+  saveRecPoint: (tx: Tx, s: Step) => TaskEither<E, void>;
+  // TODO use it
+  saveArgs: (tx: Tx, args: Args /*TODO type*/) => TaskEither<E, void>;
+  saveResp: (tx: Tx, s: R) => TaskEither<E, void>;
   firstStep?: FirstStep;
   finalStep?: FinalStep;
 };
@@ -124,19 +124,19 @@ const afterTask =
   >(
     config: ConfigWithDefaults<Tx, Step, FirstStep, FinalStep, E, R>
   ) =>
-  (tx: Tx) =>
+  (tx: Tx, name: Step) =>
   <ER extends EffectResult<ET, R, Step>>(e: ER): TaskEither<E, ER> => {
     switch (e.type) {
       case REC_POINT:
         return pipe(
-          e.name,
-          config.saveRecPoint(tx),
+          name,
+          config.saveRecPoint.bind(undefined, tx),
           TE.map(() => e)
         );
       case RESP:
         return pipe(
           e.response,
-          config.saveResp(tx),
+          config.saveResp.bind(undefined, tx),
           TE.map(() => e)
         );
       case NO_OP:
@@ -189,14 +189,14 @@ const wireIntoLifecycle =
       effect.isLocal
         ? flow(config.startTransaction, (tx) => {
             const { tryCatch } = inTransactionConfigured(tx);
-            return tryCatch(() => pipe(tx, effect.task(ctx_), TE.chainFirstW(afterTaskConfigured(tx))));
+            return tryCatch(() => pipe(tx, effect.task(ctx_), TE.chainFirstW(afterTaskConfigured(tx, effect.name))));
           })
         : flow(
             effect.task(ctx_),
             TE.chainW((r) => {
               const tx = config.startTransaction();
               const { tryCatch } = inTransactionConfigured(tx);
-              return tryCatch(() => pipe(r, afterTaskConfigured(tx)));
+              return tryCatch(() => pipe(r, afterTaskConfigured(tx, effect.name)));
             })
           ))(ctx)();
   };
@@ -271,6 +271,8 @@ const configWithDefaults = <
 });
 
 // TODO last has to be a response
+// https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-0.html#variadic-tuple-types
+// https://stackoverflow.com/questions/49310886/typing-compose-function-in-typescript-flow-compose
 export const run =
   <
     Step extends RecPointCustomName = RecPointCustomName,
