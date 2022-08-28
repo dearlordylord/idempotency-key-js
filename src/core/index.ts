@@ -177,12 +177,12 @@ const wireIntoLifecycle =
     Step extends RecPointCustomName,
     FirstStep extends string,
     FinalStep extends string,
-    Args = unknown
+    Args = unknown,
   >(
     config: ConfigWithDefaults<Tx, Step, FirstStep, FinalStep, E, R>
   ) =>
   (ctx: { key: Key; args: Args }) =>
-  (effect: Effect<E, Tx, ET, R, Step>): TaskEither<E, EffectResult<ET, R, Step>> => {
+  <TaskError extends Error>(effect: Effect<TaskError, Tx, ET, R, Step>): TaskEither<TaskError | E, EffectResult<ET, R, Step>> => {
     const inTransactionConfigured = inTransaction(config);
     const afterTaskConfigured = afterTask(config);
     return ((ctx_: typeof ctx) =>
@@ -279,6 +279,7 @@ export const run =
     FirstStep extends string = 'start',
     FinalStep extends string = 'finish',
     E extends Error = Error,
+    TaskError extends Error = Error,
     Tx = unknown,
     R = unknown,
     ET extends EffectType = EffectType,
@@ -286,8 +287,8 @@ export const run =
   >(
     config_: Config<Tx, Step, FirstStep, FinalStep, E, R>
   ) =>
-  (effects: RNA.ReadonlyNonEmptyArray<Effect<E, Tx, ET, R, Step>>) =>
-  (args: Args): TaskEither<E, EffectResult<ET, R, Step>> => {
+  (effects: RNA.ReadonlyNonEmptyArray<Effect<TaskError, Tx, ET, R, Step>>) =>
+  (args: Args): TaskEither<E | TaskError, EffectResult<ET, R, Step>> => {
     const config = configWithDefaults(config_);
     return pipe(
       args,
@@ -309,7 +310,7 @@ export const run =
                   ({
                     e: new Error(
                       'panic! no effect executed although supposed to'
-                    ) as E /*should never happen, but TODO custom error type*/,
+                    ) as TaskError /*should never happen, but TODO custom error type*/,
                     _tag: 'error',
                   } as const)
               ),
@@ -319,6 +320,7 @@ export const run =
               TE.map(
                 RNA.map(
                   TE.chainW((e) =>
+                    // TODO test RESP would stop execution and move state to finished
                     e.type === RESP
                       ? TE.left({ e, _tag: 'control' } as const) // put into "Left" to contribute to stopping execution
                       : TE.right(e)
