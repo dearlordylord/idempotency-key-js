@@ -270,6 +270,16 @@ const configWithDefaults = <
   finalStep: config.finalStep || 'finish',
 });
 
+const noEffectLeftPanic = <E extends Error>() => TE.fromOption(
+  () =>
+    ({
+      e: new Error(
+        'panic! no effect executed although supposed to'
+      ) as E /*should never happen, but TODO custom error type*/,
+      _tag: 'error',
+    } as const)
+);
+
 // TODO last has to be a response
 // https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-0.html#variadic-tuple-types
 // https://stackoverflow.com/questions/49310886/typing-compose-function-in-typescript-flow-compose
@@ -305,16 +315,7 @@ export const run =
                   )
                 : identity, // TODO assuming last is *final*
               RNA.fromReadonlyArray,
-              TE.fromOption(
-                () =>
-                  ({
-                    e: new Error(
-                      'panic! no effect executed although supposed to'
-                    ) as TaskError /*should never happen, but TODO custom error type*/,
-                    _tag: 'error',
-                  } as const)
-              ),
-
+              noEffectLeftPanic<E>(),
               TE.map(RNA.map(wireIntoLifecycle(config)({ key, args }))),
               TE.map(RNA.map(TE.mapLeft((e) => ({ e, _tag: 'error' } as const)))),
               TE.map(
